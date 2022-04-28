@@ -61,8 +61,8 @@ export default function Sheet(props: SheetProps) {
         const cy = vy + vh * my;
 
         const newViewBox = [
-          cx - w * mx,//lerp(vx, vx+w, 0.5),
-          cy - h * my,//lerp(vh, vh+h, 0.5),
+          cx - w * mx,
+          cy - h * my,
           w,
           h
         ]
