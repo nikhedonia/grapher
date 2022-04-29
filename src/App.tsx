@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import logo from './logo.svg';
 import './App.css';
 import Sheet, { useViewBox } from './Sheet';
-import {BufferGeometry, Material, Mesh, Vector3} from 'three'
+import {AxesHelper, BufferGeometry, Material, Mesh, Vector3} from 'three'
 import * as Three from 'three'
 import { Canvas, useFrame, useThree, extend, ReactThreeFiber } from '@react-three/fiber'
 import { DEG2RAD, degToRad } from 'three/src/math/MathUtils';
@@ -46,17 +46,18 @@ function klein (u, v) {
 
   const y = - 2 * ( 1 - Math.cos( U) / 2 ) * Math.sin( V );
 
-
   if ( U < Math.PI ) {
-
+    
     const x = 3 * Math.cos( U ) * ( 1 + Math.sin( U ) ) + ( 2 * ( 1 - Math.cos( U ) / 2 ) ) * Math.cos( U ) * Math.cos( V );
     const z = - 8 * Math.sin( U ) - 2 * ( 1 - Math.cos( U ) / 2 ) * Math.sin( U ) * Math.cos( V );
     return [x,y,z];
+
   } else {
 
     const x = 3 * Math.cos( U ) * ( 1 + Math.sin( U ) ) + ( 2 * ( 1 - Math.cos( U ) / 2 ) ) * Math.cos( V + Math.PI );
     const z = - 8 * Math.sin( U );
     return [x,y,z];
+  
   }
 }
 
@@ -70,10 +71,11 @@ type ParametricFunction = (u: number, v: number, t: number) => [number, number, 
 type ParametricPlotProps = {
   f: ParametricFunction
   color?: string
+  wireframe?: boolean
+  lod?: number
 }
 
 function OrbitControl() {
-
   const {
     camera,
     gl: { domElement }
@@ -85,7 +87,7 @@ function OrbitControl() {
 
 }
 
-function ParametricPlot({f, color = 'orange'}: ParametricPlotProps) {
+function ParametricPlot({f, lod, wireframe, color = 'orange'}: ParametricPlotProps) {
 
   const [t, setTimer] = useState(0);
 
@@ -95,15 +97,25 @@ function ParametricPlot({f, color = 'orange'}: ParametricPlotProps) {
     })
   }, [t]);
 
-  const kmesh = useMemo(() => f && new ParametricGeometry((u: number ,v: number, target) => target.set(...f(u, v, t)) , 120, 120), [f, t]);
+  const kmesh = useMemo(() => {
+    try {
+    return (
+      f && new ParametricGeometry((u: number ,v: number, target) => 
+            target.set(...f(u, v, t)) , lod, lod)
+      );
+    } catch {
+      return null;
+    }
+  }, [f, t]);
+
 
   if(!kmesh) return null;
 
   return (
       <mesh
-        geometry={kmesh}
-        >
-        <meshStandardMaterial color={color} />
+        key={kmesh.uuid} 
+        geometry={kmesh}>
+        <meshStandardMaterial color={color} wireframe={wireframe} />
       </mesh>
   )
 }
@@ -174,7 +186,7 @@ function compileFunction(formula: string) {
   try {
     return new Function("render", formula)
   } catch {
-    return () => 0
+    return null;
   }
 }
 
@@ -188,7 +200,8 @@ const colors = [
 
 
 function App() {
-  const [expanded, setExpanded] = useState(false);
+  const [lod, setLod] = useState(15);
+  const [wireframe, setWireframe] = useState(false);
   const [functions, setFunctions] = useState<ParametricFunction[]>([]);
   const editorRef = useRef<null | {getValue():string}>(null);
 
@@ -198,9 +211,10 @@ function App() {
 
   function compile() {
       const code = editorRef.current?.getValue();
-      console.log(code);
       if(!code) return;
       const f = compileFunction(code);
+
+      if(!f) return;
 
       let functions = [] as ParametricFunction[];
 
@@ -221,9 +235,7 @@ function App() {
       justifyContent:'stretch', 
       alignItems:'stretch'
     }}>
-      <div style={{display:'flex', justifyContent: 'stretch', width: expanded ? '100%' : '400px', flex:1}} 
-        onMouseEnter={()=>setExpanded(true)} 
-        onMouseLeave={()=>setExpanded(false)}
+      <div style={{display:'flex', justifyContent: 'stretch', width: '400px', flex:1}} 
         >
         <Editor
           defaultValue={examples}
@@ -233,9 +245,13 @@ function App() {
           language="javascript"
           theme="vs-dark"/>
       </div>
-      <div style={{display:'flex', flex:1, justifyContent:'stretch', flexDirection:'column'}}>
+      <div style={{display:'flex', flex:1, justifyContent:'stretch', flexDirection: 'column'}}>
         <div style={{background:'grey'}}>
           <button onClick={compile}> compile </button>
+          <label> detail: <input type="number" min={1} max={2000} value={lod} onChange={e => {
+            setLod(+e.target.value)
+          }} /></label>
+          <button onClick={()=>setWireframe(!wireframe)}> show {wireframe ? 'solid': 'wireframe'} </button>
         </div>
         <Canvas
           camera={{ fov: 75, position: [0, 0, 35]}}
@@ -243,8 +259,9 @@ function App() {
           <ambientLight />
           <pointLight position={[0, 0, 1000]} />
           <OrbitControl/>
+          <axesHelper scale={1} />
           {functions.map((f, i) => (
-            <ParametricPlot key={i} f={f} color={colors[i]} />
+            <ParametricPlot key={i} f={f} color={colors[i]} lod={lod} wireframe={wireframe} />
           ))}
         </Canvas>
       </div>
